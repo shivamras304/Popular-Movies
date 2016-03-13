@@ -14,35 +14,28 @@ import com.squareup.picasso.Picasso;
  * Created by shivam on 25/02/16.
  */
 
-
-/*class Movie {
-
-
-
-}*/
-
 public class ImageAdapter extends BaseAdapter {
 
-    String[] posterURLs;
+    MovieInfo[] movieInfos;
 
     private Context thisContext;
 
 
 
-    public ImageAdapter(Context context, String[] input) {
-        posterURLs = input;
+    public ImageAdapter(Context context, MovieInfo[] input) {
+        movieInfos = input;
         thisContext = context;
     }
 
 
     @Override
     public int getCount() {
-        return posterURLs.length;
+        return movieInfos.length;
     }
 
     @Override
     public Object getItem(int position) {
-        return posterURLs[position];
+        return movieInfos[position];
     }
 
     @Override
@@ -76,9 +69,9 @@ public class ImageAdapter extends BaseAdapter {
         }
 
         viewHolder.imageView.setLayoutParams(new GridView.LayoutParams(549,550));
-        viewHolder.imageView.setScaleType(ImageView.ScaleType.FIT_START);
+        //viewHolder.imageView.setScaleType(ImageView.ScaleType.FIT_START);
 
-        Picasso.with(thisContext).load(posterURLs[position]).into(viewHolder.imageView);
+        Picasso.with(thisContext).load(movieInfos[position].getPosterURL()).into(viewHolder.imageView);
         return viewHolder.imageView;
 
     }

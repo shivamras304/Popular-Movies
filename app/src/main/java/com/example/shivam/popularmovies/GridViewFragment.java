@@ -1,13 +1,17 @@
 package com.example.shivam.popularmovies;
 
+import android.content.Intent;
+import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.AsyncTask;
-import android.support.v4.app.Fragment;
 import android.os.Bundle;
+import android.preference.PreferenceManager;
+import android.support.v4.app.Fragment;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.AdapterView;
 import android.widget.GridView;
 
 import org.json.JSONArray;
@@ -26,63 +30,122 @@ import java.net.URL;
  */
 public class GridViewFragment extends Fragment {
 
+    private MovieInfo[] movieInfos;
+
+    private ImageAdapter imageAdapter;
+
+    //private static final String movieInfosParcelName = "movieInfoParcel";
+
     public GridViewFragment() {
     }
 
-    private ImageAdapter imageAdapter;
+
+    @Override
+    public void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+    }
+
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
 
-        return inflater.inflate(R.layout.fragment_gridview, container, false);
+        View rootView = inflater.inflate(R.layout.fragment_gridview, container, false);
+
+        /*if(savedInstanceState != null) {
+
+            movieInfos = (MovieInfo[]) savedInstanceState.getParcelableArray(movieInfosParcelName);
+            updateGridView();
+        }
+
+        else {
+            createGridView();
+        }*/
+
+        return rootView;
     }
+
+
+    /*@Override
+    public void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+
+        outState.putParcelableArray(movieInfosParcelName, movieInfos);
+    }*/
 
     @Override
     public void onStart() {
         super.onStart();
-        updateGridView();
+
+        createGridView();
+    }
+
+    public void createGridView() {
+        SharedPreferences sharedPref = PreferenceManager.getDefaultSharedPreferences(getActivity());
+        String sort_by_pref = sharedPref.getString(getString(R.string.sort_by_key), getString(R.string.sort_by_default));
+
+        FetchImagesTask fetchImagesTask = new FetchImagesTask();
+        fetchImagesTask.execute(sort_by_pref);
     }
 
     public void updateGridView() {
-        FetchImagesTask fetchImagesTask = new FetchImagesTask();
-        fetchImagesTask.execute("popularity.desc");
+        GridView gridView = (GridView) getActivity().findViewById(R.id.gridview_posters);
+        imageAdapter = new ImageAdapter(getActivity(), movieInfos);
+        gridView.setAdapter(imageAdapter);
+
+        gridView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+            @Override
+            public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
+                MovieInfo selectedMovie = (MovieInfo) imageAdapter.getItem(position);
+
+                Intent intent = new Intent(getActivity(), DetailsActivity.class);
+
+                intent.putExtra("selectedMovie", selectedMovie);
+
+                startActivity(intent);
+            }
+        });
+
     }
 
-
-
-    public class FetchImagesTask extends AsyncTask<String, Void, String[]> {
+    public class FetchImagesTask extends AsyncTask<String, Void, MovieInfo[]> {
 
         private final String LOG_TAG = FetchImagesTask.class.getSimpleName();
 
 
 
-        private String[] posterUrlFomJson(String movieInfoJsonStr) throws JSONException{
+        private MovieInfo[] getInfoFomJson(String movieInfoJsonStr) throws JSONException{
 
             final String baseURL =  "http://image.tmdb.org/t/p/";
-            final String size = "w185";
-            //final String size = "w500";
+            //final String size = "w185";
+            final String size = "w342";
 
             JSONObject allMovieDetails = new JSONObject(movieInfoJsonStr);
             JSONArray results = allMovieDetails.getJSONArray("results");
 
-            String[] posterURLs = new String[results.length()];
+
+            movieInfos = new MovieInfo[results.length()];
 
             for(int i = 0; i < results.length(); i++) {
 
-                //JSONObject poster_path = results.getJSONObject(i).getJSONObject("results");
+                movieInfos[i] = new MovieInfo();
 
                 String poster_path = results.getJSONObject(i).getString("poster_path");
+                movieInfos[i].setPosterURL(baseURL + size + poster_path);
 
-                posterURLs[i] = baseURL + size + poster_path;
+                movieInfos[i].setOriginalTitle(results.getJSONObject(i).getString("original_title"));
+                movieInfos[i].setPlotSynopsis(results.getJSONObject(i).getString("overview"));
+                movieInfos[i].setUserRating(results.getJSONObject(i).getDouble("vote_average"));
+                movieInfos[i].setReleaseDate(results.getJSONObject(i).getString("release_date"));
+
             }
 
-            return posterURLs;
+            return movieInfos;
         }
 
 
         @Override
-        protected String[] doInBackground(String... params) {
+        protected MovieInfo[] doInBackground(String... params) {
 
 
             // These two need to be declared outside the try/catch
@@ -102,7 +165,7 @@ public class GridViewFragment extends Fragment {
 
                 Uri builtUri = Uri.parse(FORECAST_BASE_URL).buildUpon()
                         .appendQueryParameter(SORTBY_PARAM, params[0])
-                        .appendQueryParameter(APPID_PARAM, "my_api_key")
+                        .appendQueryParameter(APPID_PARAM, "put_your_api_key_here")
                         .build();
 
                 URL url = new URL(builtUri.toString());
@@ -139,7 +202,7 @@ public class GridViewFragment extends Fragment {
 
             } catch (IOException e) {
                 Log.e(LOG_TAG, "Error ", e);
-                // If the code didn't successfully get the weather data, there's no point in attemping
+                // If the code didn't successfully get the weather data, there's no point in attemtping
                 // to parse it.
                 return null;
 
@@ -158,7 +221,7 @@ public class GridViewFragment extends Fragment {
             }
 
             try {
-                return posterUrlFomJson(movieInfoJsonStr);
+                return getInfoFomJson(movieInfoJsonStr);
             } catch (JSONException e) {
                 Log.e(LOG_TAG, e.getMessage(), e);
                 e.printStackTrace();
@@ -170,15 +233,11 @@ public class GridViewFragment extends Fragment {
         }
 
          @Override
-         protected void onPostExecute(String[] posterURLs) {
+         protected void onPostExecute(MovieInfo[] movieInfos) {
 
-             if(posterURLs != null) {
-                 GridView gridView = (GridView) getActivity().findViewById(R.id.gridview_posters);
-                 imageAdapter = new ImageAdapter(getActivity(), posterURLs);
-                 gridView.setAdapter(imageAdapter);
+             if(movieInfos != null) {
+                 updateGridView();
              }
          }
-
-
     }
 }

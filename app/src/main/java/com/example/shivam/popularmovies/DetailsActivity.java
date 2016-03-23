@@ -20,7 +20,10 @@ public class DetailsActivity extends AppCompatActivity {
         MovieInfo selectedMovie = intent.getParcelableExtra("selectedMovie");
 
         ImageView imageView = (ImageView) findViewById(R.id.thumbnail);
-        Picasso.with(getApplicationContext()).load(selectedMovie.getPosterURL()).into(imageView);
+        Picasso
+                .with(getApplicationContext())
+                .load(selectedMovie.getPosterURL())
+                .into(imageView);
 
         TextView title = (TextView) findViewById(R.id.title);
         title.setText(selectedMovie.getOriginalTitle());

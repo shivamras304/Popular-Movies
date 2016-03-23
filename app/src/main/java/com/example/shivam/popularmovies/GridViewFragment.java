@@ -1,7 +1,10 @@
 package com.example.shivam.popularmovies;
 
+import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
@@ -13,6 +16,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.GridView;
+import android.widget.Toast;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -34,15 +38,26 @@ public class GridViewFragment extends Fragment {
 
     private ImageAdapter imageAdapter;
 
-    //private static final String movieInfosParcelName = "movieInfoParcel";
+    private String currentSortByValue;
+
+    private boolean restoring;
 
     public GridViewFragment() {
+        restoring = false;
     }
 
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        //Reuse the old list if params have not changed
+        if (savedInstanceState != null) {
+
+            movieInfos = (MovieInfo[]) savedInstanceState.getParcelableArray("movieInfosParcelName");
+            currentSortByValue = savedInstanceState.getString("sortByValue");
+            restoring = savedInstanceState.getBoolean("restoring");
+        }
     }
 
 
@@ -51,45 +66,55 @@ public class GridViewFragment extends Fragment {
                              Bundle savedInstanceState) {
 
         View rootView = inflater.inflate(R.layout.fragment_gridview, container, false);
-
-        /*if(savedInstanceState != null) {
-
-            movieInfos = (MovieInfo[]) savedInstanceState.getParcelableArray(movieInfosParcelName);
-            updateGridView();
-        }
-
-        else {
-            createGridView();
-        }*/
-
         return rootView;
     }
 
 
-    /*@Override
+    @Override
     public void onSaveInstanceState(Bundle outState) {
-        super.onSaveInstanceState(outState);
 
-        outState.putParcelableArray(movieInfosParcelName, movieInfos);
-    }*/
+        outState.putParcelableArray("movieInfosParcelName", movieInfos);
+        outState.putString("sortByValue", getCurrentSortByValue());
+        outState.putBoolean("restoring", true);
+
+        super.onSaveInstanceState(outState);
+    }
 
     @Override
     public void onStart() {
         super.onStart();
-
-        createGridView();
+        updateGridView();
     }
 
-    public void createGridView() {
-        SharedPreferences sharedPref = PreferenceManager.getDefaultSharedPreferences(getActivity());
-        String sort_by_pref = sharedPref.getString(getString(R.string.sort_by_key), getString(R.string.sort_by_default));
-
-        FetchImagesTask fetchImagesTask = new FetchImagesTask();
-        fetchImagesTask.execute(sort_by_pref);
-    }
 
     public void updateGridView() {
+
+        //Check if a user changes the sort criteria and movieInfos is not null
+        if (movieInfos != null && !isSortByValueChanged()) {
+            currentSortByValue = getCurrentSortByValue();
+            showMovies();
+        }
+        else if(restoring) {
+            restoring = false;
+            showMovies();
+        }
+        else {
+            if (isNetworkAvailable()) {
+                currentSortByValue = getCurrentSortByValue();
+                FetchImagesTask fetchImagesTask = new FetchImagesTask();
+                fetchImagesTask.execute(currentSortByValue);
+            } else {
+                //Show an error message
+                Toast.makeText(getActivity(), "OOPS! No Internet Connectivity", Toast.LENGTH_SHORT);
+            }
+        }
+    }
+
+
+    private void showMovies() {
+
         GridView gridView = (GridView) getActivity().findViewById(R.id.gridview_posters);
+
         imageAdapter = new ImageAdapter(getActivity(), movieInfos);
         gridView.setAdapter(imageAdapter);
 
@@ -105,7 +130,25 @@ public class GridViewFragment extends Fragment {
                 startActivity(intent);
             }
         });
+    }
 
+    private boolean isSortByValueChanged() {
+        if (currentSortByValue == null)
+            return true;
+
+        return !currentSortByValue.equals(getCurrentSortByValue());
+    }
+
+    public String getCurrentSortByValue() {
+
+        SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(getActivity());
+        return sharedPreferences.getString(getString(R.string.sort_by_key), getString(R.string.sort_by_default));
+    }
+
+    public boolean isNetworkAvailable() {
+        ConnectivityManager connectivityManager = (ConnectivityManager) getActivity().getSystemService(Context.CONNECTIVITY_SERVICE);
+        NetworkInfo activeNetworkInfo = connectivityManager.getActiveNetworkInfo();
+        return activeNetworkInfo != null && activeNetworkInfo.isConnected();
     }
 
     public class FetchImagesTask extends AsyncTask<String, Void, MovieInfo[]> {
@@ -113,34 +156,39 @@ public class GridViewFragment extends Fragment {
         private final String LOG_TAG = FetchImagesTask.class.getSimpleName();
 
 
+        private MovieInfo[] getInfoFomJson(String movieInfoJsonStr) throws JSONException {
 
-        private MovieInfo[] getInfoFomJson(String movieInfoJsonStr) throws JSONException{
-
-            final String baseURL =  "http://image.tmdb.org/t/p/";
+            final String baseURL = "http://image.tmdb.org/t/p/";
             //final String size = "w185";
             final String size = "w342";
 
-            JSONObject allMovieDetails = new JSONObject(movieInfoJsonStr);
-            JSONArray results = allMovieDetails.getJSONArray("results");
+            try {
 
+                JSONObject allMovieDetails = new JSONObject(movieInfoJsonStr);
+                JSONArray results = allMovieDetails.getJSONArray("results");
 
-            movieInfos = new MovieInfo[results.length()];
+                MovieInfo[] infos = new MovieInfo[results.length()];
 
-            for(int i = 0; i < results.length(); i++) {
+                for (int i = 0; i < results.length(); i++) {
 
-                movieInfos[i] = new MovieInfo();
+                    infos[i] = new MovieInfo();
 
-                String poster_path = results.getJSONObject(i).getString("poster_path");
-                movieInfos[i].setPosterURL(baseURL + size + poster_path);
+                    String poster_path = results.getJSONObject(i).getString("poster_path");
+                    infos[i].setPosterURL(baseURL + size + poster_path);
+                    infos[i].setOriginalTitle(results.getJSONObject(i).getString("original_title"));
+                    infos[i].setPlotSynopsis(results.getJSONObject(i).getString("overview"));
+                    infos[i].setUserRating(results.getJSONObject(i).getDouble("vote_average"));
+                    infos[i].setReleaseDate(results.getJSONObject(i).getString("release_date"));
 
-                movieInfos[i].setOriginalTitle(results.getJSONObject(i).getString("original_title"));
-                movieInfos[i].setPlotSynopsis(results.getJSONObject(i).getString("overview"));
-                movieInfos[i].setUserRating(results.getJSONObject(i).getDouble("vote_average"));
-                movieInfos[i].setReleaseDate(results.getJSONObject(i).getString("release_date"));
+                }
 
+                return infos;
+
+            } catch (JSONException e) {
+                Log.e("JSONException", "Error parsing the JSON : " + e.toString());
             }
 
-            return movieInfos;
+            return null;
         }
 
 
@@ -165,7 +213,7 @@ public class GridViewFragment extends Fragment {
 
                 Uri builtUri = Uri.parse(FORECAST_BASE_URL).buildUpon()
                         .appendQueryParameter(SORTBY_PARAM, params[0])
-                        .appendQueryParameter(APPID_PARAM, "put_your_api_key_here")
+                        .appendQueryParameter(APPID_PARAM, "88a12c2d85ae4591b2a369cfc6773344")
                         .build();
 
                 URL url = new URL(builtUri.toString());
@@ -228,16 +276,18 @@ public class GridViewFragment extends Fragment {
             }
 
 
-
             return null;
         }
 
-         @Override
-         protected void onPostExecute(MovieInfo[] movieInfos) {
+        @Override
+        protected void onPostExecute(MovieInfo[] infos) {
 
-             if(movieInfos != null) {
-                 updateGridView();
-             }
-         }
+            if (infos != null) {
+
+                movieInfos = infos;
+
+                showMovies();
+            }
+        }
     }
 }

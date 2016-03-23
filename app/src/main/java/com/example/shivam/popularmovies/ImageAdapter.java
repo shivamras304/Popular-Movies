@@ -5,7 +5,6 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.BaseAdapter;
-import android.widget.GridView;
 import android.widget.ImageView;
 
 import com.squareup.picasso.Picasso;
@@ -68,10 +67,12 @@ public class ImageAdapter extends BaseAdapter {
             viewHolder = (ViewHolder) view.getTag();
         }
 
-        viewHolder.imageView.setLayoutParams(new GridView.LayoutParams(549,550));
-        //viewHolder.imageView.setScaleType(ImageView.ScaleType.FIT_START);
+        try {
+            Picasso.with(thisContext).load(movieInfos[position].getPosterURL()).into(viewHolder.imageView);
+        } catch (IllegalArgumentException e) {
+            viewHolder.imageView.setImageResource(R.drawable.error);
+        }
 
-        Picasso.with(thisContext).load(movieInfos[position].getPosterURL()).into(viewHolder.imageView);
         return viewHolder.imageView;
 
     }
